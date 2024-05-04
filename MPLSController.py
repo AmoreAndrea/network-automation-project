@@ -138,28 +138,6 @@ class MplsController(app_manager.RyuApp):
             print(f"{nb_pa} shortest path have been found, only the first {k} will be considered")
             return k_shortest_path
 
-    #Used to find out if an end-point have only one connection to the MPLS network
-    def is_choking(host_list, host):
-        host_onn = 0
-        for h in host_list:
-            if h.mac == host:
-                host_conn = len(h)
-                break
-        if host_conn == 1:
-            return True
-        else:
-            return False
-            
-            
-    # We need to find out the edge switch which connects host to the MPLS network ---> used for 1 link host found in is_choking
-    def edge_switches(host, link_list):
-        count = 0
-        for l in link_list:
-            if l[0] == host:
-                edge_switch = l[1]
-                break
-        return edge_switch
-               
         
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
@@ -232,23 +210,13 @@ class MplsController(app_manager.RyuApp):
         for l in links_:
             self.port_occupied[l[0]][l[2]] = 1
      
-     # MAY BE USELESS AND NOT WORKING !!!
-            
-        # Add the host nodes in the network and connect them in the networkx graph (necessary for k path algorithm)
-        # host_list = get_host(self.topology_api_app, None)   
-        # hosts = [host.mac for host in host_list]
-        # self.net.add_nodes_from(hosts)
-        # h_links = [(host.mac, host.dpid, {'port': host.port_no}) for host in host_list]
-        # self.net.add_edges_from(h_links)
-        # h_links = [(host.dpid, host.mac, {'port': host.port_no}) for host in host_list]
-        # self.net.add_edges_from(h_links)
- 
         # Discover of LER switches -----> may want to consider the case of multiple LERs in one or both side of the MPLS network
         if dpid_src in self.is_edge_switch(src, self.net):
             #Generation of k_disjoint paths between the two LER
             # Select one path randomly
             out_switches = self.out_switch(dst, self.net)
             o = len(out_switches)
+            #Here the switch to which create the paths is chosen almost randomly ---> must be directly connected to dst
             if o == 1:
                 out_s = out_switches[0]
             else:
@@ -264,6 +232,7 @@ class MplsController(app_manager.RyuApp):
             i = 0
             while lsp in self.used_lsp.keys() and i < 10:
                 lsp = k_paths[random.randint(0, k -1)]  
+                lsp_prio = random.randint(0,30)
                 i += 1              
             # Find the actual position in the LSP and the next hop with the corresponding port
             for hop in lsp:
