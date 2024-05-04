@@ -79,6 +79,7 @@ class MplsController(app_manager.RyuApp):
         succ_list = list()
         succ_list = graph.successors(switch)
         return list(succ_list)
+    
     def out_switch(switch, graph):
         pred = list()
         pred = graph.predecessors(switch)
