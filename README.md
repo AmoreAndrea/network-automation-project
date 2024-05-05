@@ -4,7 +4,7 @@ Testing the application:
 
 1) Creating the app program and the topology program and upload them on this repo for an easy access from every possible host
 
-2) Go on the host CLI and type git clone https://github.com/AmoreAndrea/network-automation-project.git to clone everything from the repo
+2) Go on the host CLI and type <git clone https://github.com/AmoreAndrea/network-automation-project.git> to clone everything from the repo
 
    --> this should be done only one time when everything is working and the App program does not need any further modification but we can easily remove the directory from the terminal by doing rm network-automation-project -r
 
