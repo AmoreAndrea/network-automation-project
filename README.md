@@ -17,5 +17,8 @@ Testing the application:
 7) ryu-manager flowmanager/flowmanager.py MPLSController.py --observe-links : to run the controller app
 
 8) On the mininet terminal : h1 ping h3 or whatever other command testing the connectivity between two hosts (like iperf)
+
+TO DO :
+--> from testing, i found out the app does not know how to manage broadcast address, so we may need to add something for this
    
    
