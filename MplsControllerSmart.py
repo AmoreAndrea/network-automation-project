@@ -115,10 +115,10 @@ class MplsControllerSmart(app_manager.RyuApp):
         links_list = get_link(self.topology_api_app, None)
         #the links list contains a triplet indicating the src switch, the dst switch and the port through wich they communicate ----> VERY USEFUL!!!
         # ex. (1 , 2 , {'port' : 2}) --> this is not the real dpid, should be something like : 00:00:00:03
-        links=[(link.src,link.dst,{'port':link.src.port_no}) for link in links_list]
+        links=[(links.src,links.dst,{'port':link.src.port_no}) for link in links_list]
         print(links)
         graph.add_edges_from(links)
-        links=[link.dst, link.src,{'port':link.dst.port_no} for link in links_list]
+        links=[links.dst, links.src,{'port':link.dst.port_no} for link in links_list]
         graph.add_edges_from(links)
         
         host_list = get_host(self.topology_api_app, None)
