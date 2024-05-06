@@ -185,7 +185,7 @@ class MplsController(app_manager.RyuApp):
 
         # TOPOLOGY DISCOVERY------------------------------------------
         switch_list = get_switch(self.topology_api_app, None)   
-        switches=[f"{dpid_core} + {str(switch.dp.id)}" for switch in switch_list]
+        switches=[dpid_core + str(switch.dp.id) for switch in switch_list]
 
         if self.GLOBAL_VARIABLE == 0:
             for id_,s in enumerate(switches):
@@ -199,12 +199,12 @@ class MplsController(app_manager.RyuApp):
         links_list = get_link(self.topology_api_app, None)
         #the links list contains a triplet indicating the src switch, the dst switch and the port through wich they communicate ----> VERY USEFUL!!!
         # ex. (1 , 2 , {'port' : 2}) --> this is not the real dpid, should be something like : 00:00:00:03
-        links=[(f"{dpid_core} +{str(link.src.dpid)}",f"{dpid_core} +{str(link.dst.dpid)}",{'port':link.src.port_no}) for link in links_list]
+        links=[(dpid_core +str(link.src.dpid),dpid_core +str(link.dst.dpid),{'port':link.src.port_no}) for link in links_list]
         for l in links:
             lls.append(l)
         print(lls)
         self.net.add_edges_from(links)
-        links=[(f"{dpid_core} +{str(link.dst.dpid)} +{str(link.src.dpid)}",{'port':link.dst.port_no}) for link in links_list]
+        links=[(dpid_core +str(link.dst.dpid), dpid_core +str(link.src.dpid),{'port':link.dst.port_no}) for link in links_list]
         for l in links:
             lls.append(l)
         self.net.add_edges_from(links)
