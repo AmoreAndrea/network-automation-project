@@ -248,7 +248,7 @@ class MplsControllerSmart(app_manager.RyuApp):
                 self.logger.info("Packet in switch %s with Source %s and Destination %s received at %s", dpid, src_mac, dst_mac, in_port)
                 print(f"The chosen route on which forward the packet is {act_lsp} with label {act_lab}")
             else:
-                actions = [parser.OFPActionPopMpls(), parser.OFPActionOutput(1)]
+                actions = [parser.OFPActionPopMpls(), parser.OFPActionOutput(outPo)]
                 match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = act_lab)
                 self.add_flow(datapath, 10, match, actions)
                 inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
