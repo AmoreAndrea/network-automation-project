@@ -118,7 +118,7 @@ class MplsControllerSmart(app_manager.RyuApp):
         links=[(links.src,links.dst,{'port':link.src.port_no}) for link in links_list]
         print(links)
         graph.add_edges_from(links)
-        links=[links.dst, links.src,{'port':link.dst.port_no} for link in links_list]
+        links=[(links.dst, links.src,{'port':link.dst.port_no}) for link in links_list]
         graph.add_edges_from(links)
         
         host_list = get_host(self.topology_api_app, None)
