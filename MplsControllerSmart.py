@@ -29,6 +29,7 @@ class MplsControllerSmart(app_manager.RyuApp):
         self.mac_to_port = {}
         self.mac_to_dpid = {}
         self.port_to_mac = {}
+        self.port_occupied = {}
         self.topology_api_app = self
         self.net = nx.DiGraph()
         self.nodes = {}
@@ -107,7 +108,14 @@ class MplsControllerSmart(app_manager.RyuApp):
     def build_graph(self, graph):
         dpid_prefix = "00:00:00:00:00:0"
         switch_list = get_switch(self.topology_api_app, None)   
-        switches=[(dpid_prefix+ str(switch.dp.id), switch.mac) for switch in switch_list]
+        switches=[(dpid_prefix+ str(switch.dp.id), switch.eth) for switch in switch_list]
+        if self.GLOBAL_VARIABLE == 0:
+            # Probably need to look for these ports to correctly match the out and in port
+            for id_,s in enumerate(switches):
+                for switch_port in range(1, len(switch_list[id_].ports)):
+                    self.port_occupied.setdefault(s, {})
+                    self.port_occupied[s][switch_port] = 0
+        print(self.port_occupied)
         graph.add_nodes_from(switches)
         print(switches)
         
@@ -120,6 +128,9 @@ class MplsControllerSmart(app_manager.RyuApp):
         graph.add_edges_from(links)
         links=[(links.dst, links.src,{'port':link.dst.port_no}) for link in links_list]
         graph.add_edges_from(links)
+        links_=[(link.dst.dpid,link.src.dpid,link.dst.port_no) for link in links_list]
+        for l in links_:
+            self.port_occupied[l[0]][l[2]] = 1
         
         host_list = get_host(self.topology_api_app, None)
         host = [(h.mac, h.ipv4) for h in host_list]
