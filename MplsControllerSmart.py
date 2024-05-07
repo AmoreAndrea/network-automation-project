@@ -40,7 +40,7 @@ class MplsControllerSmart(app_manager.RyuApp):
         
     def is_edge_switch(self, src, dpid_src, inport):
         for host in get_all_host(self):
-            if host.mac == src.mac and host.port.dpid == dpid_src and host.port.port_no == inport:
+            if host.mac == src and host.port.dpid == dpid_src and host.port.port_no == inport:
                 return True
             else:
                 return False
