@@ -36,22 +36,21 @@ class MplsControllerSmart(app_manager.RyuApp):
         self.links = {}
         self.GLOBAL_VARIABLE = 0
         self.GLOBAL_K_VALUE = 3
-        self.generated_lsp = {}
-        self.in_use_lsp = list()
+        self.in_use_lsp = {}
         
-    def is_edge_switch(self, src, switch, graph):
-        succ_list = list()
-        succ_list = graph.successors(src)
-        if switch in succ_list:
-            return True
-        else:
-            return False
+    def is_edge_switch(self, src, dpid_src, inport):
+        for host in get_all_host(self):
+            if host.mac == src.mac and host.port.dpid == dpid_src and host.port.port_no == inport:
+                return True
+            else:
+                return False
         
     
-    def out_switch(self, switch, graph):
-        pred = list()
-        pred = graph.predecessors(switch)
-        return list(pred)
+    def out_switch(self, dst_mac):
+        for host in get_all_host(self):
+            if host.mac == dst_mac:
+                return (host.port.dpid, host.port.port_no)
+        return(None, None)
     
     #K Disjoint Path algorithm
     #Function to find all simple path and then sort them in length order
@@ -108,40 +107,41 @@ class MplsControllerSmart(app_manager.RyuApp):
     def build_graph(self, graph):
         dpid_prefix = "00:00:00:00:00:0"
         switch_list = get_switch(self.topology_api_app, None)   
-        switches=[(dpid_prefix+ str(switch.dp.id), switch.eth) for switch in switch_list]
+        switches=[switch.dp.id for switch in switch_list]
         if self.GLOBAL_VARIABLE == 0:
             # Probably need to look for these ports to correctly match the out and in port
             for id_,s in enumerate(switches):
                 for switch_port in range(1, len(switch_list[id_].ports)):
                     self.port_occupied.setdefault(s, {})
                     self.port_occupied[s][switch_port] = 0
-        print(self.port_occupied)
+        print("Occupied port :  ", self.port_occupied)
         graph.add_nodes_from(switches)
-        print(switches)
+        print("Switches : ", switches)
         
         #add bidirectional links to the topology 
         links_list = get_link(self.topology_api_app, None)
         #the links list contains a triplet indicating the src switch, the dst switch and the port through wich they communicate ----> VERY USEFUL!!!
         # ex. (1 , 2 , {'port' : 2}) --> this is not the real dpid, should be something like : 00:00:00:00:00:01
         links=[(links.src,links.dst,{'port':link.src.port_no}) for link in links_list]
-        print(links)
+        print("Links : ",links)
         graph.add_edges_from(links)
         links=[(links.dst, links.src,{'port':link.dst.port_no}) for link in links_list]
         graph.add_edges_from(links)
         links_=[(link.dst.dpid,link.src.dpid,link.dst.port_no) for link in links_list]
         for l in links_:
             self.port_occupied[l[0]][l[2]] = 1
-        
-        host_list = get_host(self.topology_api_app, None)
-        host = [(h.mac, h.ipv4) for h in host_list]
-        graph.add_nodes_from(host)
-        for s in switch_list:
-            h = get_host(self.topology_api_app, dpid = s.dp.id)
-            h_link=list()
-            h_link = [(dpid_prefix + s.dp.id, i.mac, {'port': i.port}) for i in h]
-            graph.add_edges_from(h_link)
-            h_link = [(i.mac, dpid_prefix + s.dp.id, {'port': i.port}) for i in h]
+
         return graph
+    
+    def find_next_hop_port(self, graph, path, dpid):
+        for node in path:
+            if node == dpid:
+                actual_hop = path.index(node)
+                break
+        next_hop = actual_hop + 1
+        link = graph[path[actual_hop]][path[next_hop]]
+        return link['port']
+
    
     # Creation of all the paths and labels (paths from host to host)
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -149,6 +149,7 @@ class MplsControllerSmart(app_manager.RyuApp):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
+        self.net = self.build_graph(self.net)
         
 
         match = parser.OFPMatch()
@@ -156,23 +157,7 @@ class MplsControllerSmart(app_manager.RyuApp):
                                           ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 0, match, actions)
         
-        #Create the topology :
-        #--> switch nodes are named 00:00:00:00:00:0{dpid_src}
-        #--> host nodes are named with their MAC address
-        #--> all links are bidirectional and contains an info on the port --> generic_link = (dpid_src, dpid_dst, {'port': port_no})
-        self.net = self.build_graph(self.net)
-        # Creation of K link disjoint paths from each host to each other host
-        # Assign a label (starting from 1000 increasing by 1) to each of these paths
-        lab = 1000
-        for src in get_all_host(self):
-            if self.net.has_node(src.mac):
-                for dst in get_all_host(self):
-                    if self.net.has_node(dst.mac):
-                        if dst != src:
-                            k_paths = self.k_shortest_paths(self.net, src, dst, self.GLOBAL_K_VALUE)
-                            for pa in k_paths:
-                                self.generated_lsp[pa] = lab
-                                lab += 1
+        
     
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
@@ -188,6 +173,9 @@ class MplsControllerSmart(app_manager.RyuApp):
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
         datapath.send_msg(mod)
+    
+    
+
                     
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
@@ -201,75 +189,79 @@ class MplsControllerSmart(app_manager.RyuApp):
         eth = pkt.get_protocols(ethernet.ethernet)[0]  
         dst_mac = eth.dst
         src_mac = eth.src
-        dpid = datapath.id 
+        dpid_src = datapath.id 
         if pkt.get_protocol(ipv4.ipv4):
             ipv4_header = pkt.get_protocol(ipv4.ipv4)     
             dst_ip = ipv4.dst
             src_ip = ipv4.src  
-        
-        if self.is_edge_switch(src_mac, dpid, self.net):
-            # Edge switch --> label push
-            possible_lsp = list()
-            possible_label = list()
-            for pa in self.generated_lsp.keys():
-                if src_mac in pa and dst_mac in pa:
-                    possible_lsp.append(pa)
-                    possible_label.append(self.generated_lsp[pa])
-
-            n = len(possible_lsp)
-            k = random.randint(0, n -1)
-            act_lab = possible_label[k]
-            act_lsp = possible_lsp[k]
-            #self.in_use_lsp.append(act_lsp)
-            act_hop = act_lsp.index(src_mac)
-            next_hop = act_lsp[act_hop + 1]
-            outPo = self.net[act_hop][next_hop]['port']
-
+        dst_switch, dst_port = self.out_switch(dst_mac)
+        if self.is_edge_switch(src_mac, dpid_src, in_port):
+            self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
+            k_paths = self.k_shortest_paths(self.net, dpid_src, dst_switch, self.GLOBAL_K_VALUE)
+            k = len(k_paths)
+            lsp = k_paths[random.randint(0, k-1)]
+            lab = 1000
+            if lsp in self.in_use_lsp.keys() and lab in self.in_use_lsp.values():
+                lsp = k_paths[random.randint(0, k-1)]
+                lab += 1
+            self.in_use_lsp[lsp] = lab
+            outPo = self.find_next_hop_port(self.net, lsp, dpid_src)
+            print(f"The packet received from {dpid_src} is routed with label {lab} in the LSP {''.join(lsp)}")
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac)
-            actions = [parser.OFPActionPushMpls(), parser.OFPActionSetField(mpls_label=act_lab), parser.OFPActionOutput(outPo)]
+            actions = [parser.OFPActionPushMpls(), parser.OFPActionSetField(mpls_label=lab), parser.OFPActionOutput(outPo)]
+            self.add_flow(datapath, 10, match, actions)
+            inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+            mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
+            datapath.send_msg(mod)
+        elif dpid_src != dst_switch:
+            self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
+            # Middle stage switch
+            for p in pkt.protocols:
+                if isinstance(p, mpls.mpls):
+                    lab = p.label
+                    break
+            for pa,label in self.in_use_lsp.items():
+                if lab == label:
+                    lsp = pa
+                    break
+            outPo = self.find_next_hop_port(self.net, lsp, dpid_src)
+            print(f"The packet is inside the MPLS network routed with label {lab} on the LSP {lsp}")
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = lab)
+            actions = [parser.OFPActionOutput(outPo)]
             self.add_flow(datapath, 10, match, actions)
             inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
                                              actions)]
             mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
             datapath.send_msg(mod)
         else:
-            # Middle stage switch
+            self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
             for p in pkt.protocols:
                 if isinstance(p, mpls.mpls):
-                    act_lab = p.label
+                    lab = p.label
                     break
-                else:
-                    return
-            for pa, lab in self.generated_lsp.items():
-                if act_lab == lab:
-                    act_lsp = pa
+            for pa,label in self.in_use_lsp.items():
+                if lab == label:
+                    lsp = pa
                     break
-            for node in pa:
-                if dpid == node:
-                    actual_hop = pa.index(node)
-                    next_hop = pa[actual_hop+1]
-                    outPo = self.net[node][next_hop]['port']
-                    break
-            if next_hop != dst_mac:
-                actions = [parser.OFPActionOutput(outPo)]
-                match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = act_lab)
-                self.add_flow(datapath, 10, match, actions)
-                inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
-                                                actions)]
-                mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
-                datapath.send_msg(mod)
-                
-                self.logger.info("Packet in switch %s with Source %s and Destination %s received at %s", dpid, src_mac, dst_mac, in_port)
-                print(f"The chosen route on which forward the packet is {act_lsp} with label {act_lab}")
-            else:
-                match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = act_lab)
-                actions = [parser.OFPActionPopMpls(), parser.OFPActionOutput(outPo)]
-                self.add_flow(datapath, 10, match, actions)
-                inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
-                datapath.send_msg(mod)
-                self.logger.info("Packet reached Dst!!")
+            outPo = dst_port
+            actions = [parser.OFPActionOutput(outPo)]
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = lab)
+            self.add_flow(datapath, 10, match, actions)
+            inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+            mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
+            datapath.send_msg(mod)
+            print(f"The packet routed on the LSP {''.join(lsp)} with label {lab} is leaving the MPLS network")
 
+
+
+
+
+
+
+
+        
         
         
         
