@@ -114,7 +114,7 @@ class MplsControllerSmart(app_manager.RyuApp):
         #add bidirectional links to the topology 
         links_list = get_link(self.topology_api_app, None)
         #the links list contains a triplet indicating the src switch, the dst switch and the port through wich they communicate ----> VERY USEFUL!!!
-        # ex. (1 , 2 , {'port' : 2}) --> this is not the real dpid, should be something like : 00:00:00:03
+        # ex. (1 , 2 , {'port' : 2}) --> this is not the real dpid, should be something like : 00:00:00:00:00:01
         links=[(links.src,links.dst,{'port':link.src.port_no}) for link in links_list]
         print(links)
         graph.add_edges_from(links)
