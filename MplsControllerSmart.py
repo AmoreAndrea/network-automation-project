@@ -223,11 +223,9 @@ class MplsControllerSmart(app_manager.RyuApp):
             for p in pkt.protocols:
                 if isinstance(p, mpls.mpls):
                     lab = p.label
-                    break
             for pa,label in self.in_use_lsp.items():
                 if lab == label:
                     lsp = pa
-                    break
             outPo = self.find_next_hop_port(self.net, lsp, dpid_src)
             print(f"The packet is inside the MPLS network routed with label {lab} on the LSP {lsp}")
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = lab)
@@ -245,11 +243,9 @@ class MplsControllerSmart(app_manager.RyuApp):
             for p in pkt.protocols:
                 if isinstance(p, mpls.mpls):
                     lab = p.label
-                    break
             for pa,label in self.in_use_lsp.items():
                 if lab == label:
                     lsp = pa
-                    break
             outPo = dst_port
             actions = [parser.OFPActionOutput(outPo)]
             match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, mpls_label = lab)
