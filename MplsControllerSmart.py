@@ -217,7 +217,7 @@ class MplsControllerSmart(app_manager.RyuApp):
             datapath.send_msg(mod)
             return
         
-        elif dpid_src != dst_switch:
+        elif dpid_src != dst_switch and not self.is_edge_switch(src_mac, dpid_src, in_port):
             self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
             # Middle stage switch
             for p in pkt.protocols:
