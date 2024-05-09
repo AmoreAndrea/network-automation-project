@@ -195,6 +195,7 @@ class MplsControllerSmart(app_manager.RyuApp):
             dst_ip = ipv4.dst
             src_ip = ipv4.src  
         dst_switch, dst_port = self.out_switch(dst_mac)
+        
         if self.is_edge_switch(src_mac, dpid_src, in_port):
             self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
             k_paths = self.k_shortest_paths(self.net, dpid_src, dst_switch, self.GLOBAL_K_VALUE)
@@ -214,6 +215,8 @@ class MplsControllerSmart(app_manager.RyuApp):
                                              actions)]
             mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
             datapath.send_msg(mod)
+            return
+        
         elif dpid_src != dst_switch:
             self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
             # Middle stage switch
@@ -234,7 +237,10 @@ class MplsControllerSmart(app_manager.RyuApp):
                                              actions)]
             mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
             datapath.send_msg(mod)
+            return
+        
         else:
+            # Destination switch reached
             self.logger.info("Packet in switch: %s, From the port: %s", dpid_src, in_port)
             for p in pkt.protocols:
                 if isinstance(p, mpls.mpls):
@@ -253,6 +259,7 @@ class MplsControllerSmart(app_manager.RyuApp):
             mod = parser.OFPFlowMod(datapath=datapath, priority=10, match=match, instructions=inst)
             datapath.send_msg(mod)
             print(f"The packet routed on the LSP {''.join(lsp)} with label {lab} is leaving the MPLS network")
+            return
 
 
 
